@@ -3533,15 +3533,6 @@ func (c *client) deliverMsg(prodIsMQTT bool, sub *subscription, acc *Account, su
 		}
 	}
 
-	// Check outbound threshold and queue IO flush if needed.
-	// This is specifically looking at situations where we are getting behind and may want
-	// to intervene before this producer goes back to top of readloop. We are in the producer's
-	// readloop go routine at this point.
-	// FIXME(dlc) - We may call this alot, maybe suppress after first call?
-	if len(client.out.nb) != 0 {
-		client.flushSignal()
-	}
-
 	// Add the data size we are responsible for here. This will be processed when we
 	// return to the top of the readLoop.
 	c.addToPCD(client)
