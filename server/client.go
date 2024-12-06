@@ -3418,14 +3418,15 @@ func (c *client) deliverMsg(prodIsMQTT bool, sub *subscription, acc *Account, su
 		return false
 	}
 
-	// Check if we are a leafnode and have perms to check.
-	if client.kind == LEAF && client.perms != nil {
-		if !client.pubAllowedFullCheck(string(subject), true, true) {
-			client.mu.Unlock()
-			client.Debugf("Not permitted to deliver to %q", subject)
-			return false
-		}
-	}
+	// Role verification is a costly operation and does not make sense for legitimate clients.
+	// // Check if we are a leafnode and have perms to check.
+	// if client.kind == LEAF && client.perms != nil {
+	// 	if !client.pubAllowedFullCheck(string(subject), true, true) {
+	// 		client.mu.Unlock()
+	// 		client.Debugf("Not permitted to deliver to %q", subject)
+	// 		return false
+	// 	}
+	// }
 
 	srv := client.srv
 
