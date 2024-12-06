@@ -144,6 +144,7 @@ const (
 	compressionNegotiated                         // Marks if this connection has negotiated compression level with remote.
 	didTLSFirst                                   // Marks if this connection requested and was accepted doing the TLS handshake first (prior to INFO).
 	isSlowConsumer                                // Marks connection as a slow consumer.
+	didFirstFlushSignal                           // Marks the client to suppress the outbound threshold check
 )
 
 // set the flag (would be equivalent to set the boolean to true)
@@ -3645,9 +3646,12 @@ func (c *client) deliverMsg(prodIsMQTT bool, sub *subscription, acc *Account, su
 	// This is specifically looking at situations where we are getting behind and may want
 	// to intervene before this producer goes back to top of readloop. We are in the producer's
 	// readloop go routine at this point.
-	// FIXME(dlc) - We may call this alot, maybe suppress after first call?
 	if len(client.out.nb) != 0 {
-		client.flushSignal()
+		if c.flags.setIfNotSet(didFirstFlushSignal) {
+			client.flushSignal()
+		}
+	} else {
+		c.flags.clear(didFirstFlushSignal)
 	}
 
 	// Add the data size we are responsible for here. This will be processed when we
