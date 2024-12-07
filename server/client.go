@@ -99,12 +99,13 @@ const (
 	msgHeadProtoLen = len(msgHeadProto)
 
 	// For controlling dynamic buffer sizes.
-	startBufSize    = 512   // For INFO/CONNECT block
-	minBufSize      = 64    // Smallest to shrink to for PING/PONG
-	maxBufSize      = 65536 // 64k
-	shortsToShrink  = 2     // Trigger to shrink dynamic buffers
-	maxFlushPending = 10    // Max fsps to have in order to wait for writeLoop
-	readLoopReport  = 2 * time.Second
+	startBufSize     = 512   // For INFO/CONNECT block
+	minBufSize       = 64    // Smallest to shrink to for PING/PONG
+	maxBufSize       = 65536 // 64k
+	shortsToShrink   = 2     // Trigger to shrink dynamic buffers
+	maxFlushPending  = 10    // Max fsps to have in order to wait for writeLoop
+	maxFlushWaitTime = 100 * time.Millisecond
+	readLoopReport   = 2 * time.Second
 
 	// Server should not send a PING (for RTT) before the first PONG has
 	// been sent to the client. However, in case some client libs don't
@@ -1267,7 +1268,9 @@ func (c *client) flushClients(budget time.Duration) time.Time {
 		if budget > 0 && cp.out.lft < 2*budget && cp.flushOutbound() {
 			budget -= cp.out.lft
 		} else {
-			cp.flushSignal()
+			if cp.out.pb >= maxBufSize || cp.out.fsp >= maxFlushPending || cp.out.lft == 0 || cp.out.lft > maxFlushWaitTime {
+				cp.flushSignal()
+			}
 		}
 
 		cp.mu.Unlock()
