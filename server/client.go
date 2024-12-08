@@ -99,13 +99,11 @@ const (
 	msgHeadProtoLen = len(msgHeadProto)
 
 	// For controlling dynamic buffer sizes.
-	startBufSize     = 512   // For INFO/CONNECT block
-	minBufSize       = 64    // Smallest to shrink to for PING/PONG
-	maxBufSize       = 65536 // 64k
-	shortsToShrink   = 2     // Trigger to shrink dynamic buffers
-	maxFlushPending  = 10    // Max fsps to have in order to wait for writeLoop
-	maxFlushWaitTime = 100 * time.Millisecond
-	readLoopReport   = 2 * time.Second
+	startBufSize   = 512   // For INFO/CONNECT block
+	minBufSize     = 64    // Smallest to shrink to for PING/PONG
+	maxBufSize     = 65536 // 64k
+	shortsToShrink = 2     // Trigger to shrink dynamic buffers
+	readLoopReport = 2 * time.Second
 
 	// Server should not send a PING (for RTT) before the first PONG has
 	// been sent to the client. However, in case some client libs don't
@@ -144,7 +142,6 @@ const (
 	connectProcessFinished                        // Marks if this connection has finished the connect process.
 	compressionNegotiated                         // Marks if this connection has negotiated compression level with remote.
 	didTLSFirst                                   // Marks if this connection requested and was accepted doing the TLS handshake first (prior to INFO).
-	didFirstFlushSignal                           // Marks the client to suppress the outbound threshold check
 )
 
 // set the flag (would be equivalent to set the boolean to true)
@@ -1213,8 +1210,7 @@ func (c *client) writeLoop() {
 	for {
 		c.mu.Lock()
 		if closed = c.isClosed(); !closed {
-			owtf := c.out.fsp > 0 && c.out.pb < maxBufSize && c.out.fsp < maxFlushPending
-			if waitOk && (c.out.pb == 0 || owtf) {
+			if waitOk && c.out.pb == 0 {
 				c.out.sg.Wait()
 				// Check that connection has not been closed while lock was released
 				// in the conditional wait.
@@ -1268,9 +1264,7 @@ func (c *client) flushClients(budget time.Duration) time.Time {
 		if budget > 0 && cp.out.lft < 2*budget && cp.flushOutbound() {
 			budget -= cp.out.lft
 		} else {
-			if cp.out.pb >= maxBufSize || cp.out.fsp >= maxFlushPending || cp.out.lft == 0 || cp.out.lft > maxFlushWaitTime {
-				cp.flushSignal()
-			}
+			cp.flushSignal()
 		}
 
 		cp.mu.Unlock()
@@ -3536,18 +3530,6 @@ func (c *client) deliverMsg(prodIsMQTT bool, sub *subscription, acc *Account, su
 		if len(client.replies) > replyPermLimit {
 			client.pruneReplyPerms()
 		}
-	}
-
-	// Check outbound threshold and queue IO flush if needed.
-	// This is specifically looking at situations where we are getting behind and may want
-	// to intervene before this producer goes back to top of readloop. We are in the producer's
-	// readloop go routine at this point.
-	if len(client.out.nb) != 0 {
-		if c.flags.setIfNotSet(didFirstFlushSignal) {
-			client.flushSignal()
-		}
-	} else {
-		c.flags.clear(didFirstFlushSignal)
 	}
 
 	// Add the data size we are responsible for here. This will be processed when we
