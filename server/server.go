@@ -320,6 +320,8 @@ type Server struct {
 
 	// Queue to process JS API requests that come from routes (or gateways)
 	jsAPIRoutedReqs *ipQueue[*jsAPIRoutedReq]
+
+	flusher *flusher
 }
 
 // For tracking JS nodes.
@@ -2227,6 +2229,8 @@ func (s *Server) Start() {
 		return
 	}
 
+	s.flusher = startFlusher(runtime.GOMAXPROCS(0))
+
 	// Start up resolver machinery.
 	if ar := s.AccountResolver(); ar != nil {
 		if err := ar.Start(s); err != nil {
@@ -2560,6 +2564,10 @@ func (s *Server) Shutdown() {
 
 	// Wait for go routines to be done.
 	s.grWG.Wait()
+
+	if s.flusher != nil {
+		s.flusher.Stop()
+	}
 
 	if opts.PortsFileDir != _EMPTY_ {
 		s.deletePortsFile(opts.PortsFileDir)
@@ -3512,9 +3520,9 @@ func (s *Server) addToTempClients(cid uint64, c *client) bool {
 	return added
 }
 
-/////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////
 // These are some helpers for accounting in functional tests.
-/////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////
 
 // NumRoutes will report the number of registered routes.
 func (s *Server) NumRoutes() int {
