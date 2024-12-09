@@ -1247,24 +1247,24 @@ func (c *client) flushClients(budget time.Duration) time.Time {
 		// TODO(dlc) - Wonder if it makes more sense to create a new map?
 		delete(c.pcd, cp)
 
-		// Queue up a flush for those in the set
-		cp.mu.Lock()
-		// Update last activity for message delivery
-		cp.last = last
-
-		// Just ignore if this was closed.
-		if cp.isClosed() {
-			cp.mu.Unlock()
-			continue
-		}
-
-		if budget > 0 && cp.out.lft < 2*budget && cp.flushOutbound() {
-			budget -= cp.out.lft
-		} else {
-			cp.flushSignal()
-		}
-
-		cp.mu.Unlock()
+		// // Queue up a flush for those in the set
+		// cp.mu.Lock()
+		// // Update last activity for message delivery
+		// cp.last = last
+		//
+		// // Just ignore if this was closed.
+		// if cp.isClosed() {
+		// 	cp.mu.Unlock()
+		// 	continue
+		// }
+		//
+		// if budget > 0 && cp.out.lft < 2*budget && cp.flushOutbound() {
+		// 	budget -= cp.out.lft
+		// } else {
+		cp.flushSignal()
+		// }
+		//
+		// cp.mu.Unlock()
 	}
 	return last
 }
