@@ -1850,9 +1850,9 @@ func (c *client) markConnAsClosed(reason ClosedState) {
 func (c *client) flushSignal() {
 	// // Check that sg is not nil, which will happen if the connection is closed.
 	// if c.out.sg != nil {
-	// c.out.sg.Signal()
+	c.out.sg.Signal()
 	// }
-	c.srv.flusher.Q(c)
+	// c.srv.flusher.Q(c)
 }
 
 // Traces a message.
