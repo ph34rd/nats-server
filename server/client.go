@@ -1430,7 +1430,8 @@ func (c *client) readLoop(pre []byte) {
 		}
 
 		// Signal to writeLoop to flush to socket.
-		last := c.flushClients(0)
+		// last := c.flushClients(0)
+		last := time.Now()
 
 		// Update activity, check read buffer size.
 		c.mu.Lock()
@@ -3528,10 +3529,11 @@ func (c *client) deliverMsg(prodIsMQTT bool, sub *subscription, acc *Account, su
 			client.pruneReplyPerms()
 		}
 	}
+	client.out.sg.Signal()
 
-	// Add the data size we are responsible for here. This will be processed when we
-	// return to the top of the readLoop.
-	c.addToPCD(client)
+	// // Add the data size we are responsible for here. This will be processed when we
+	// // return to the top of the readLoop.
+	// c.addToPCD(client)
 
 	if client.trace {
 		client.traceOutOp(bytesToString(mh[:len(mh)-LEN_CR_LF]), nil)
@@ -3947,7 +3949,8 @@ func (c *client) processInboundClientMsg(msg []byte) (bool, bool) {
 			if sub := c.subForReply(c.pa.reply); sub != nil {
 				proto := fmt.Sprintf("HMSG %s %s 16 16\r\nNATS/1.0 503\r\n\r\n\r\n", c.pa.reply, sub.sid)
 				c.queueOutbound([]byte(proto))
-				c.addToPCD(c)
+				c.out.sg.Signal()
+				// c.addToPCD(c)
 			}
 		}
 		c.mu.Unlock()
@@ -4816,15 +4819,15 @@ sendToRoutesOrLeafs:
 
 		mh := c.msgHeaderForRouteOrLeaf(subject, reply, rt, acc)
 
-		// if c.deliverMsg(prodIsMQTT, rt.sub, acc, subject, reply, mh, dmsg, false) {
-		// 	if rt.sub.icb == nil {
-		// 		dlvMsgs++
-		// 		dlvExtraSize += int64(len(dmsg) - len(msg))
-		// 	}
-		// 	didDeliver = true
-		// }
-		c.srv.flusher.Q(delivery{c, prodIsMQTT, rt.sub, acc, subject, reply, mh, dmsg, false})
-		didDeliver = true
+		if c.deliverMsg(prodIsMQTT, rt.sub, acc, subject, reply, mh, dmsg, false) {
+			if rt.sub.icb == nil {
+				dlvMsgs++
+				dlvExtraSize += int64(len(dmsg) - len(msg))
+			}
+			didDeliver = true
+		}
+		// c.srv.flusher.Q(delivery{c, prodIsMQTT, rt.sub, acc, subject, reply, mh, dmsg, false})
+		// didDeliver = true
 
 		// If we set the header reset the origin pub args.
 		if hset {
