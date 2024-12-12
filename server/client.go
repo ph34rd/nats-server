@@ -1207,10 +1207,12 @@ func (c *client) writeLoop() {
 
 	// Main loop. Will wait to be signaled and then will use
 	// buffered outbound structure for efficient writev to the underlying socket.
+	var lastFlush time.Time
 	for {
+		elapsed := time.Since(lastFlush)
 		c.mu.Lock()
 		if closed = c.isClosed(); !closed {
-			if waitOk && c.out.pb == 0 {
+			if waitOk && (c.out.pb == 0 || elapsed < 500*time.Millisecond || c.out.pb >= maxBufSize) {
 				c.out.sg.Wait()
 				// Check that connection has not been closed while lock was released
 				// in the conditional wait.
@@ -1234,6 +1236,7 @@ func (c *client) writeLoop() {
 		// Flush data
 		waitOk = c.flushOutbound()
 		c.mu.Unlock()
+		lastFlush = time.Now()
 	}
 }
 
