@@ -104,12 +104,11 @@ const (
 	msgHeadProtoLen = len(msgHeadProto)
 
 	// For controlling dynamic buffer sizes.
-	startBufSize    = 512   // For INFO/CONNECT block
-	minBufSize      = 64    // Smallest to shrink to for PING/PONG
-	maxBufSize      = 65536 // 64k
-	shortsToShrink  = 2     // Trigger to shrink dynamic buffers
-	maxFlushPending = 10    // Max fsps to have in order to wait for writeLoop
-	readLoopReport  = 2 * time.Second
+	startBufSize   = 512   // For INFO/CONNECT block
+	minBufSize     = 64    // Smallest to shrink to for PING/PONG
+	maxBufSize     = 65536 // 64k
+	shortsToShrink = 2     // Trigger to shrink dynamic buffers
+	readLoopReport = 2 * time.Second
 
 	// Server should not send a PING (for RTT) before the first PONG has
 	// been sent to the client. However, in case some client libs don't
@@ -312,7 +311,6 @@ type outbound struct {
 	nb  net.Buffers   // Pending buffers for send, each has fixed capacity as per nbPool below.
 	wnb net.Buffers   // Working copy of "nb", reused on each flushOutbound call, partial writes may leave entries here for next iteration.
 	pb  int64         // Total pending/queued bytes.
-	fsp int32         // Flush signals that are pending per producer from readLoop's pcd.
 	sg  *sync.Cond    // To signal writeLoop that there is data to flush.
 	wdl time.Duration // Snapshot of write deadline.
 	mp  int64         // Snapshot of max pending for client.
@@ -1224,8 +1222,7 @@ func (c *client) writeLoop() {
 	for {
 		c.mu.Lock()
 		if closed = c.isClosed(); !closed {
-			owtf := c.out.fsp > 0 && c.out.pb < maxBufSize && c.out.fsp < maxFlushPending
-			if waitOk && (c.out.pb == 0 || owtf) {
+			if waitOk && c.out.pb == 0 {
 				c.out.sg.Wait()
 				// Check that connection has not been closed while lock was released
 				// in the conditional wait.
@@ -1267,8 +1264,6 @@ func (c *client) flushClients(budget time.Duration) time.Time {
 		cp.mu.Lock()
 		// Update last activity for message delivery
 		cp.last = last
-		// Remove ourselves from the pending list.
-		cp.out.fsp--
 
 		// Just ignore if this was closed.
 		if cp.isClosed() {
@@ -1413,8 +1408,7 @@ func (c *client) readLoop(pre []byte) {
 					c.Warnf("Readloop processing time: %v", dur)
 				}
 				// Need to call flushClients because some of the clients have been
-				// assigned messages and their "fsp" incremented, and need now to be
-				// decremented and their writeLoop signaled.
+				// assigned messages and need now to be decremented and their writeLoop signaled.
 				c.flushClients(0)
 				// handled inline
 				if err != ErrMaxPayload && err != ErrAuthentication {
@@ -3605,7 +3599,6 @@ func (c *client) deliverMsg(prodIsMQTT bool, sub *subscription, acc *Account, su
 // if `client` is same than `c`.
 func (c *client) addToPCD(client *client) {
 	if _, ok := c.pcd[client]; !ok {
-		client.out.fsp++
 		c.pcd[client] = needFlush
 	}
 }
