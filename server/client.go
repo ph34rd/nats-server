@@ -252,6 +252,7 @@ type client struct {
 	replies    map[string]*resp
 	mperms     *msgDeny
 	darray     []string
+	pcdMu      sync.Mutex
 	pcd        map[*client]struct{}
 	atmr       *time.Timer
 	expires    time.Time
@@ -4814,13 +4815,16 @@ sendToRoutesOrLeafs:
 		}
 
 		mh := c.msgHeaderForRouteOrLeaf(subject, reply, rt, acc)
-		if c.deliverMsg(prodIsMQTT, rt.sub, acc, subject, reply, mh, dmsg, false) {
-			if rt.sub.icb == nil {
-				dlvMsgs++
-				dlvExtraSize += int64(len(dmsg) - len(msg))
-			}
-			didDeliver = true
-		}
+
+		// if c.deliverMsg(prodIsMQTT, rt.sub, acc, subject, reply, mh, dmsg, false) {
+		// 	if rt.sub.icb == nil {
+		// 		dlvMsgs++
+		// 		dlvExtraSize += int64(len(dmsg) - len(msg))
+		// 	}
+		// 	didDeliver = true
+		// }
+		c.srv.flusher.Q(delivery{c, prodIsMQTT, rt.sub, acc, subject, reply, mh, dmsg, false})
+		didDeliver = true
 
 		// If we set the header reset the origin pub args.
 		if hset {
